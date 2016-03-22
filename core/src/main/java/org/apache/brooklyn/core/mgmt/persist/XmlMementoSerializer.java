@@ -454,25 +454,28 @@ public class XmlMementoSerializer<T> extends XmlSerializer<T> implements Memento
                 result.catalogItemId(catalogItemId);
                 return result;
             } finally {
-                instance = null;
+                context.put("SpecConverter.instance", null);
                 if (customLoaderSet) {
                     popXstreamCustomClassLoader();
                 }
             }
         }
 
-        Object instance;
-        
         @Override
         protected Object instantiateNewInstance(HierarchicalStreamReader reader, UnmarshallingContext context) {
             // the super calls getAttribute which requires that we have not yet done moveDown,
-            // so we do this earlier and cache it for when we call super.unmarshal
+            // so we do this earlier and cache it for when we call super.unmarshal.
+            // Store this in the UnmarshallingContext. Note that we *must not* use a field of SpecConverter,
+            // because that same instance is used by everything calling XmlMementoSerializer (including multiple
+            // threads).
+            Object instance = context.get("SpecConverter.instance");
             if (instance==null)
                 throw new IllegalStateException("Instance should be created and cached");
             return instance;
         }
         protected void instantiateNewInstanceSettingCache(HierarchicalStreamReader reader, UnmarshallingContext context) {
-            instance = super.instantiateNewInstance(reader, context);
+            Object instance = super.instantiateNewInstance(reader, context);
+            context.put("SpecConverter.instance", instance);
         }
     }
     
