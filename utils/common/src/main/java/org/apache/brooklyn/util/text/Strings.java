@@ -172,6 +172,35 @@ public class Strings {
     }
 
     /**
+     * Returns a substring of the given string, starting after the end of the first occurrence of the infix
+     */
+    public static String getStringAfter(String string, String infix) {
+        if (string==null) return null;
+        int index;
+        if (infix!=null) {
+            index = string.indexOf(infix);
+            if (index==-1) return null;
+            string = string.substring(index + infix.length());
+        }
+        return string;
+    }
+
+    /**
+     * Returns a list of strings containing all occurrences of a fragment between prefix and suffix
+     */
+    public static List<String> getAllOccurrencesBetween(String string, String prefix, String suffix) {
+        List<String> result = MutableList.of();
+
+        String nextOccurrence = getFragmentBetween(string, prefix, suffix);
+        while (nextOccurrence != null) {
+            result.add(nextOccurrence);
+            string = getStringAfter(string, nextOccurrence);
+            nextOccurrence = getFragmentBetween(string, prefix, suffix);
+        }
+        return result;
+    }
+
+    /**
      * As {@link #removeFromStart(String, String)}, repeating until all such prefixes are gone.
      */
     public static String removeAllFromStart(String string, String... prefixes) {
