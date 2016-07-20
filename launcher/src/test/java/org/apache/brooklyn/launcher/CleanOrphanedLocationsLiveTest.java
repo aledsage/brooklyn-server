@@ -18,11 +18,17 @@
  */
 package org.apache.brooklyn.launcher;
 
+import java.io.File;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.brooklyn.api.mgmt.ManagementContext;
 import org.apache.brooklyn.api.mgmt.ha.HighAvailabilityMode;
 import org.apache.brooklyn.api.mgmt.rebind.PersistenceExceptionHandler;
 import org.apache.brooklyn.api.mgmt.rebind.RebindManager;
 import org.apache.brooklyn.api.mgmt.rebind.mementos.BrooklynMementoRawData;
+import org.apache.brooklyn.core.entity.Entities;
+import org.apache.brooklyn.core.internal.BrooklynProperties;
 import org.apache.brooklyn.core.mgmt.ha.OsgiManager;
 import org.apache.brooklyn.core.mgmt.internal.LocalManagementContext;
 import org.apache.brooklyn.core.mgmt.internal.ManagementContextInternal;
@@ -32,53 +38,53 @@ import org.apache.brooklyn.core.mgmt.persist.PersistMode;
 import org.apache.brooklyn.core.mgmt.persist.PersistenceObjectStore;
 import org.apache.brooklyn.core.mgmt.rebind.PersistenceExceptionHandlerImpl;
 import org.apache.brooklyn.core.mgmt.rebind.RebindManagerImpl;
-import org.apache.brooklyn.core.mgmt.rebind.transformer.impl.DeleteOrphanedLocationsTransformer;
+import org.apache.brooklyn.core.mgmt.rebind.transformer.impl.DeleteOrphanedStateTransformer;
 import org.apache.brooklyn.core.server.BrooklynServerConfig;
 import org.apache.brooklyn.core.server.BrooklynServerPaths;
 import org.apache.brooklyn.test.Asserts;
 import org.apache.brooklyn.util.collections.MutableMap;
 import org.apache.brooklyn.util.collections.MutableSet;
+import org.apache.brooklyn.util.os.Os;
 import org.apache.brooklyn.util.time.Duration;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import org.apache.brooklyn.core.internal.BrooklynProperties;
-
-import java.util.Map;
-import java.util.Set;
-
 public class CleanOrphanedLocationsLiveTest {
 
     private String PERSISTED_STATE_PATH_WITH_ORPHANED_LOCATIONS = "/orphaned-locations-test-data/data-with-orphaned-locations";
     private String PERSISTED_STATE_PATH_WITH_MULTIPLE_LOCATIONS_OCCURRENCE = "/orphaned-locations-test-data/fake-multiple-location-for-multiple-search-tests";
     private String PERSISTED_STATE_PATH_WITHOUT_ORPHANED_LOCATIONS = "/orphaned-locations-test-data/data-without-orphaned-locations";
-    private String PERSISTED_STATE_DESTINATION_PATH = "/orphaned-locations-test-data/copy-persisted-state-destination";
-
 
     private String persistenceDirWithOrphanedLocations;
     private String persistenceDirWithoutOrphanedLocations;
     private String persistenceDirWithMultipleLocationsOccurrence;
-    private String destinationDir;
+    
+    private File destinationDir;
     private String destinationLocation;
     private String localBrooklynProperties;
     private String persistenceLocation;
-    private String highAvailabilityMode;
 
-    private DeleteOrphanedLocationsTransformer transformer;
+    private DeleteOrphanedStateTransformer transformer;
 
     private ManagementContext managementContext;
 
     @BeforeMethod(alwaysRun = true)
-    public void initialize() throws Exception {
+    public void setUp() throws Exception {
         persistenceDirWithOrphanedLocations = getClass().getResource(PERSISTED_STATE_PATH_WITH_ORPHANED_LOCATIONS).getFile();
         persistenceDirWithoutOrphanedLocations = getClass().getResource(PERSISTED_STATE_PATH_WITHOUT_ORPHANED_LOCATIONS).getFile();
         persistenceDirWithMultipleLocationsOccurrence = getClass().getResource(PERSISTED_STATE_PATH_WITH_MULTIPLE_LOCATIONS_OCCURRENCE).getFile();
 
-        destinationDir = getClass().getResource(PERSISTED_STATE_DESTINATION_PATH).getFile();
+        destinationDir = Os.newTempDir(getClass());
 
-        transformer = DeleteOrphanedLocationsTransformer.builder().build();
+        transformer = DeleteOrphanedStateTransformer.builder().build();
+    }
+    
+    @AfterMethod(alwaysRun = true)
+    public void tearDown() {
+        if (managementContext != null) Entities.destroyAll(managementContext);
+        if (destinationDir != null) Os.deleteRecursively(destinationDir);
     }
 
     private void initManagementContextAndPersistence(String persistenceDir) {
@@ -201,7 +207,7 @@ public class CleanOrphanedLocationsLiveTest {
                 .highAvailabilityMode(HighAvailabilityMode.DISABLED);
 
         try {
-            launcher.cleanOrphanedLocations(destinationDir, destinationLocation);
+            launcher.cleanOrphanedLocations(destinationDir.getAbsolutePath(), destinationLocation);
 
         } catch (Exception e) {
             throw new Exception(e);
@@ -209,7 +215,7 @@ public class CleanOrphanedLocationsLiveTest {
             launcher.terminate();
         }
 
-        initManagementContextAndPersistence(destinationDir);
+        initManagementContextAndPersistence(destinationDir.getAbsolutePath());
         BrooklynMementoRawData mementoRawDataFromCleanedState = managementContext.getRebindManager().retrieveMementoRawData();
         Asserts.assertTrue(mementoRawDataFromCleanedState.getEntities().size() != 0);
         Asserts.assertTrue(mementoRawDataFromCleanedState.getLocations().size() != 0);
@@ -228,6 +234,7 @@ public class CleanOrphanedLocationsLiveTest {
                 "m72nTYl799",
                 "m72LKVN799",
                 "jf4rwubqyb",
+                "pski1c4s14",
                 "jf4rwuTTTb",
                 "jf4rwuHHHb",
                 "m72nvkl799",
@@ -237,7 +244,8 @@ public class CleanOrphanedLocationsLiveTest {
 
         Set<String> locationsToKeep = MutableSet.of(
                 "m72nvkl799",
-                "jf4rwubqyb"
+                "jf4rwubqyb",
+                "pski1c4s14"
         );
 
         initManagementContextAndPersistence(persistenceDirWithMultipleLocationsOccurrence);
@@ -248,10 +256,5 @@ public class CleanOrphanedLocationsLiveTest {
 
         Asserts.assertEquals(allReferencedLocationsFoundByTransformer, allReferencedLocations);
         Asserts.assertEquals(locationsToKeepFoundByTransformer.keySet(), locationsToKeep);
-    }
-
-    @AfterMethod
-    public void cleanCopiedPersistedState() {
-
     }
 }
