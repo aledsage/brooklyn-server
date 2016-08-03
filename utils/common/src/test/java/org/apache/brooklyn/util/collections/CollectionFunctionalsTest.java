@@ -58,7 +58,7 @@ public class CollectionFunctionalsTest {
     }
 
     @Test
-    public void testAllAndAny() {
+    public void testAll() {
         Assert.assertEquals(CollectionFunctionals.all(Predicates.equalTo(1)).apply(
             MutableList.of(1, 1, 1)), true);
         Assert.assertEquals(CollectionFunctionals.all(Predicates.equalTo(1)).apply(
@@ -67,7 +67,12 @@ public class CollectionFunctionalsTest {
             MutableList.of(1, 0, 1)), false);
         Assert.assertEquals(CollectionFunctionals.all(Predicates.equalTo(1)).apply(
             MutableList.of(0, 0, 0)), false);
-        
+        Assert.assertEquals(CollectionFunctionals.all(Predicates.alwaysTrue()).apply(
+                ImmutableList.of()), true);
+    }
+    
+    @Test
+    public void testAny() {
         Assert.assertEquals(CollectionFunctionals.any(Predicates.equalTo(1)).apply(
             MutableList.of(1, 1, 1)), true);
         Assert.assertEquals(CollectionFunctionals.any(Predicates.equalTo(1)).apply(
@@ -76,7 +81,8 @@ public class CollectionFunctionalsTest {
             MutableList.of(1, 0, 1)), true);
         Assert.assertEquals(CollectionFunctionals.any(Predicates.equalTo(1)).apply(
             MutableList.of(0, 0, 0)), false);
-        
+        Assert.assertEquals(CollectionFunctionals.any(Predicates.alwaysTrue()).apply(
+                ImmutableList.of()), false);
     }
     
 }

@@ -33,6 +33,8 @@ import org.apache.brooklyn.core.entity.AbstractEntity;
 import org.apache.brooklyn.core.entity.lifecycle.Lifecycle;
 import org.apache.brooklyn.core.entity.lifecycle.ServiceStateLogic;
 import org.apache.brooklyn.util.collections.MutableMap;
+import org.apache.brooklyn.util.time.Duration;
+import org.apache.brooklyn.util.time.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -120,9 +122,14 @@ public class TestEntityImpl extends AbstractEntity implements TestEntity {
 
     @Override
     public void start(Collection<? extends Location> locs) {
+        Duration delayOnStart = config().get(DELAY_ON_START);
         LOG.trace("Starting {}", this);
         callHistory.add("start");
         ServiceStateLogic.setExpectedState(this, Lifecycle.STARTING);
+        sensors().set(SERVICE_UP, false);
+        if (delayOnStart != null && delayOnStart.isLongerThan(Duration.ZERO)) {
+            Time.sleep(delayOnStart);
+        }
         counter.incrementAndGet();
         addLocations(locs);
         sensors().set(SERVICE_UP, true);
@@ -131,9 +138,13 @@ public class TestEntityImpl extends AbstractEntity implements TestEntity {
 
     @Override
     public void stop() { 
+        Duration delayOnStop = config().get(DELAY_ON_STOP);
         LOG.trace("Stopping {}", this);
         callHistory.add("stop");
         ServiceStateLogic.setExpectedState(this, Lifecycle.STOPPING);
+        if (delayOnStop != null && delayOnStop.isLongerThan(Duration.ZERO)) {
+            Time.sleep(delayOnStop);
+        }
         counter.decrementAndGet();
         sensors().set(SERVICE_UP, false);
         ServiceStateLogic.setExpectedState(this, Lifecycle.STOPPED);

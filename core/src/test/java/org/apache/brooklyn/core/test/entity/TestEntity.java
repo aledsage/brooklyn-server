@@ -44,6 +44,7 @@ import org.apache.brooklyn.core.entity.trait.Startable;
 import org.apache.brooklyn.core.sensor.BasicNotificationSensor;
 import org.apache.brooklyn.core.sensor.Sensors;
 import org.apache.brooklyn.util.core.flags.SetFromFlag;
+import org.apache.brooklyn.util.time.Duration;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -57,6 +58,9 @@ import com.google.common.reflect.TypeToken;
 @ImplementedBy(TestEntityImpl.class)
 public interface TestEntity extends Entity, Startable, EntityLocal, EntityInternal {
 
+    ConfigKey<Duration> DELAY_ON_START = ConfigKeys.newConfigKey(Duration.class, "delayOnStart", "The delay during start(), between serviceUp=false and serviceUp=true", Duration.ZERO);
+    ConfigKey<Duration> DELAY_ON_STOP = ConfigKeys.newConfigKey(Duration.class, "delayOnStop", "The delay during stop(), between state=STOPPING and serviceUp=false", Duration.ZERO);
+    
     @SetFromFlag("confName")
     public static final ConfigKey<String> CONF_NAME = ConfigKeys.newStringConfigKey("test.confName", "Configuration key, my name", "defaultval");
     public static final BasicConfigKey<Map> CONF_MAP_PLAIN = new BasicConfigKey<Map>(Map.class, "test.confMapPlain", "Configuration key that's a plain map", ImmutableMap.of());

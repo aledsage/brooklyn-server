@@ -21,12 +21,12 @@ package org.apache.brooklyn.entity.software.base;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.util.Collection;
-import java.util.List;
 
 import org.apache.brooklyn.api.location.Location;
 import org.apache.brooklyn.api.mgmt.Task;
 import org.apache.brooklyn.core.entity.AbstractEntity;
 import org.apache.brooklyn.core.entity.Entities;
+import org.apache.brooklyn.core.entity.lifecycle.Lifecycle;
 import org.apache.brooklyn.core.entity.lifecycle.ServiceStateLogic;
 import org.apache.brooklyn.core.entity.lifecycle.ServiceStateLogic.ComputeServiceIndicatorsFromChildrenAndMembers;
 import org.apache.brooklyn.core.location.Locations;
@@ -43,7 +43,9 @@ public class SameServerEntityImpl extends AbstractEntity implements SameServerEn
     @Override
     protected void initEnrichers() {
         super.initEnrichers();
-        
+
+        ServiceStateLogic.setExpectedState(this, Lifecycle.CREATED);
+
         // Because can have multiple children (similar to groups/clusters/apps), need to
         // monitor their health and indicate this has failed if any of them have failed.
         enrichers().add(ServiceStateLogic.newEnricherFromChildren()
