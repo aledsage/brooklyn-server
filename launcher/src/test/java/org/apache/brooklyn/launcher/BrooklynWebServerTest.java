@@ -87,6 +87,7 @@ public class BrooklynWebServerTest {
     
     @Test
     public void verifyHttp() throws Exception {
+        brooklynProperties.put(BrooklynWebConfig.HTTPS_REQUIRED, false);
         webServer = new BrooklynWebServer(newManagementContext(brooklynProperties));
         webServer.skipSecurity();
         try {
@@ -137,7 +138,6 @@ public class BrooklynWebServerTest {
 
     @Test
     public void verifyHttpsFromConfig() throws Exception {
-        brooklynProperties.put(BrooklynWebConfig.HTTPS_REQUIRED, true);
         brooklynProperties.put(BrooklynWebConfig.KEYSTORE_URL, getFile("server.ks"));
         brooklynProperties.put(BrooklynWebConfig.KEYSTORE_PASSWORD, "password");
         verifyHttpsFromConfig(brooklynProperties);
@@ -145,7 +145,6 @@ public class BrooklynWebServerTest {
 
     @Test
     public void verifyHttpsCiphers() throws Exception {
-        brooklynProperties.put(BrooklynWebConfig.HTTPS_REQUIRED, true);
         brooklynProperties.put(BrooklynWebConfig.TRANSPORT_PROTOCOLS, "XXX");
         brooklynProperties.put(BrooklynWebConfig.TRANSPORT_CIPHERS, "XXX");
         try {

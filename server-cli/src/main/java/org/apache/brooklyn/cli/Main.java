@@ -244,13 +244,17 @@ public class Main extends AbstractMain {
 
         @Option(name = { "-p", "--port" }, title = "port number",
                 description = "Use this port for the brooklyn management web console and REST API; "
-                    + "default is 8081+ for http, 8443+ for https.")
+                    + "default is 8443+ for https, 8081+ for http.")
         public String port;
 
         @Option(name = { "--https" },
-            description = "Launch the web console on https")
-        public boolean useHttps = false;
+            description = "[DEPRECATED] Launch the web console on https (defaults to true, so has no effect)")
+        public boolean deprecatedUseHttps = false;
         
+        @Option(name = { "--http" },
+                description = "Launch the web console on https")
+            public boolean useHttp = false;
+            
         @Option(name = { "-nc", "--noConsole" },
                 description = "Do not start the web console or REST API")
         public boolean noConsole = false;
@@ -590,10 +594,17 @@ public class Main extends AbstractMain {
                     .locations(Strings.isBlank(locations) ? ImmutableList.<String>of() : JavaStringEscapes.unwrapJsonishListIfPossible(locations));
             
             launcher.webconsole(!noConsole);
-            if (useHttps) {
-                // true sets it; false (not set) leaves it blank and falls back to config key
+            if (deprecatedUseHttps && useHttp) {
+                throw new FatalConfigurationRuntimeException("Cannot specify both --https and --http; "
+                        + "remove one or more of the conflicting CLI arguments.");
+            }
+            if (deprecatedUseHttps) {
+                log.warn("Deprecated use of --https; this is now the default so has no effect");
+            }
+            if (useHttp) {
+                // if not explicitly set, falls back to config key
                 // (no way currently to override config key, but that could be added)
-                launcher.webconsoleHttps(useHttps);
+                launcher.webconsoleHttps(false);
             }
             launcher.webconsolePort(port);
             

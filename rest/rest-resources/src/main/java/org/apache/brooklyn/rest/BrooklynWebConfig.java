@@ -80,7 +80,7 @@ public class BrooklynWebConfig {
 
     public final static ConfigKey<Boolean> HTTPS_REQUIRED = ConfigKeys.newBooleanConfigKey(
             BASE_NAME+".security.https.required",
-            "Whether HTTPS is required; false here can be overridden by CLI option", false); 
+            "Whether HTTPS is required; false here can be overridden by CLI option", true); 
 
     public final static ConfigKey<PortRange> WEB_CONSOLE_PORT = ConfigKeys.newConfigKey(PortRange.class,
         BASE_NAME+".port",
