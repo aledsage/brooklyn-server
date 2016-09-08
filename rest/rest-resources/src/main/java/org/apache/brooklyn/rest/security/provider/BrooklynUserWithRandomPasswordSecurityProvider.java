@@ -21,9 +21,7 @@ package org.apache.brooklyn.rest.security.provider;
 import javax.servlet.http.HttpSession;
 
 import org.apache.brooklyn.api.mgmt.ManagementContext;
-import org.apache.brooklyn.rest.BrooklynWebConfig;
 import org.apache.brooklyn.util.javalang.JavaClassNames;
-import org.apache.brooklyn.util.net.Networking;
 import org.apache.brooklyn.util.text.Identifiers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +34,7 @@ public class BrooklynUserWithRandomPasswordSecurityProvider extends AbstractSecu
 
     public BrooklynUserWithRandomPasswordSecurityProvider() {
         this.password = Identifiers.makeRandomId(10);
-        LOG.info("Allowing access to web console from localhost or with {}:{}", USER, password);
+        LOG.info("Allowing access to web console with auto-generated credentials {}:{}", USER, password);
     }
 
     public BrooklynUserWithRandomPasswordSecurityProvider(ManagementContext mgmt) {
@@ -45,27 +43,13 @@ public class BrooklynUserWithRandomPasswordSecurityProvider extends AbstractSecu
 
     @Override
     public boolean authenticate(HttpSession session, String user, String password) {
-        if ((USER.equals(user) && this.password.equals(password)) || isRemoteAddressLocalhost(session)) {
+        if ((USER.equals(user) && this.password.equals(password))) {
             return allow(session, user);
         } else {
             return false;
         }
     }
 
-    private boolean isRemoteAddressLocalhost(HttpSession session) {
-        Object remoteAddress = session.getAttribute(BrooklynWebConfig.REMOTE_ADDRESS_SESSION_ATTRIBUTE);
-        if (!(remoteAddress instanceof String)) return false;
-        if (Networking.isLocalhost((String)remoteAddress)) {
-            if (LOG.isTraceEnabled()) {
-                LOG.trace(this+": granting passwordless access to "+session+" originating from "+remoteAddress);
-            }
-            return true;
-        } else {
-            LOG.debug(this+": password required for "+session+" originating from "+remoteAddress);
-            return false;
-        }
-    }
-    
     @Override
     public String toString() {
         return JavaClassNames.cleanSimpleClassName(this);

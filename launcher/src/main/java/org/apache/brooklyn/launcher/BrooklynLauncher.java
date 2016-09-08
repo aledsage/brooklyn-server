@@ -291,17 +291,6 @@ public class BrooklynLauncher extends BasicLauncher<BrooklynLauncher> {
         } else if (BrooklynWebConfig.hasNoSecurityOptions(managementContext.getConfig())) {
             LOG.info("No security provider options specified. Define a security provider or users to prevent a random password being created and logged.");
             
-            if (bindAddress==null) {
-                LOG.info("Starting Brooklyn web-console with passwordless access on localhost and protected access from any other interfaces (no bind address specified)");
-            } else {
-                if (Arrays.equals(new byte[] { 127, 0, 0, 1 }, bindAddress.getAddress())) { 
-                    LOG.info("Starting Brooklyn web-console with passwordless access on localhost");
-                } else if (Arrays.equals(new byte[] { 0, 0, 0, 0 }, bindAddress.getAddress())) { 
-                    LOG.info("Starting Brooklyn web-console with passwordless access on localhost and random password (logged) required from any other interfaces");
-                } else { 
-                    LOG.info("Starting Brooklyn web-console with passwordless access on localhost (if permitted) and random password (logged) required from any other interfaces");
-                }
-            }
             brooklynProperties.put(
                     BrooklynWebConfig.SECURITY_PROVIDER_INSTANCE,
                     new BrooklynUserWithRandomPasswordSecurityProvider(managementContext));
