@@ -126,7 +126,6 @@ import com.google.common.net.HostAndPort;
 import com.google.common.reflect.TypeToken;
 
 import groovy.lang.Closure;
-import static org.apache.brooklyn.util.JavaGroovyEquivalents. groovyTruth;
 
 /**
  * Operations on a machine that is accessible via ssh.

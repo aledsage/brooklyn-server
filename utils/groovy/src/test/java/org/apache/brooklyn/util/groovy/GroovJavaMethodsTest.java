@@ -42,16 +42,16 @@ public class GroovJavaMethodsTest {
     private GString emptyGstring = new GStringImpl(new Object[0], new String[] {""});
 
     @Test
-    public void testTruth() {
-        assertFalse(truth(null));
-        assertTrue(truth("someString"));
-        assertFalse(truth(""));
-        assertTrue(truth(1));
-        assertFalse(truth(0));
-        assertTrue(truth(true));
-        assertFalse(truth(false));
-        assertTrue(truth(gstring));
-        assertFalse(truth(emptyGstring));
+    public void testTruth() throws Throwable {
+        assertFalse(groovyTruthInvocation(null));
+        assertTrue(groovyTruthInvocation("someString"));
+        assertFalse(groovyTruthInvocation(""));
+        assertTrue(groovyTruthInvocation(1));
+        assertFalse(groovyTruthInvocation(0));
+        assertTrue(groovyTruthInvocation(true));
+        assertFalse(groovyTruthInvocation(false));
+        assertTrue(groovyTruthInvocation(gstring));
+        assertFalse(groovyTruthInvocation(emptyGstring));
     }
 
     @Test
@@ -74,20 +74,20 @@ public class GroovJavaMethodsTest {
 
     @Test
     public void testIsCase() throws Throwable {
-        assertFalse(callScriptBytecodeAdapter_isCase(
+        assertFalse(groovyIsCaseInvocation(
                 null,
                 GString.class));
         assertTrue(
-                callScriptBytecodeAdapter_isCase(
+                groovyIsCaseInvocation(
                         gstring,
                         GString.class));
         assertFalse(
-                callScriptBytecodeAdapter_isCase(
+                groovyIsCaseInvocation(
                         "exampleString",
                         GString.class));
 
         assertTrue(
-                callScriptBytecodeAdapter_isCase(
+                groovyIsCaseInvocation(
                         new Callable<Void>() {
                             @Override public Void call() {
                                 return null;
@@ -95,12 +95,12 @@ public class GroovJavaMethodsTest {
                         },
                         Callable.class));
         assertFalse(
-                callScriptBytecodeAdapter_isCase(
+                groovyIsCaseInvocation(
                         "exampleString",
                         Callable.class));
 
         assertTrue(
-                callScriptBytecodeAdapter_isCase(
+                groovyIsCaseInvocation(
                         new Closure<Void>(null) {
                             @Override public Void call() {
                                 return null;
@@ -108,17 +108,26 @@ public class GroovJavaMethodsTest {
                         },
                         Closure.class));
         assertFalse(
-                callScriptBytecodeAdapter_isCase(
+                groovyIsCaseInvocation(
                         "exampleString",
                         Closure.class));
     }
 
-    private boolean callScriptBytecodeAdapter_isCase(Object switchValue, Class<?> caseExpression) throws Throwable {
+    private boolean groovyIsCaseInvocation(Object switchValue, Class<?> caseExpression) throws Throwable {
         // We expect this to be equivalent to:
         //     org.codehaus.groovy.runtime.ScriptBytecodeAdapter.isCase(switchValue, caseExpression);
-        boolean result = org.apache.brooklyn.util.groovy.GroovyJavaMethods.scriptBytecodeAdapter_isCase(switchValue, caseExpression);
-        boolean equiv = org.codehaus.groovy.runtime.ScriptBytecodeAdapter.safeGroovyIsCase(switchValue, caseExpression);
+        boolean result = org.apache.brooklyn.util.groovy.GroovyJavaMethods.safeGroovyIsCase(switchValue, caseExpression);
+        boolean equiv = org.codehaus.groovy.runtime.ScriptBytecodeAdapter.isCase(switchValue, caseExpression);
         assertEquals(result, equiv, "switchValue="+switchValue+"; caseExpression="+caseExpression);
         return result;
+    }
+
+    private <T> boolean groovyTruthInvocation(T value) throws Throwable {
+        // We expect this to be equivalent to:
+        //     org.codehaus.groovy.runtime.ScriptBytecodeAdapter.isCase(switchValue, caseExpression);
+        boolean groovyTruth = org.apache.brooklyn.util.groovy.GroovyJavaMethods.truth(value);
+        boolean javaEquivalentGroovyTruth = org.apache.brooklyn.util.JavaGroovyEquivalents.groovyTruth(value);
+        assertEquals(groovyTruth, javaEquivalentGroovyTruth, "groovyTruth="+groovyTruth+"; javaEquivalentGroovyTruth="+javaEquivalentGroovyTruth);
+        return groovyTruth;
     }
 }
