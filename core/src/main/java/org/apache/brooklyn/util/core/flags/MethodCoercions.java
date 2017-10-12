@@ -31,6 +31,7 @@ import javax.annotation.Nullable;
 import org.apache.brooklyn.util.exceptions.Exceptions;
 import org.apache.brooklyn.util.guava.Maybe;
 import org.apache.brooklyn.util.javalang.Reflections;
+import org.apache.brooklyn.util.javalang.coerce.ClassCoercionException;
 
 import com.google.common.base.Optional;
 import com.google.common.base.Predicate;
@@ -61,10 +62,7 @@ public class MethodCoercions {
             public boolean apply(@Nullable Method input) {
                 if (input == null) return false;
                 if (!input.getName().equals(methodName)) return false;
-                Type[] parameterTypes = input.getGenericParameterTypes();
-                return parameterTypes.length == 1
-                        && TypeCoercions.tryCoerce(argument, TypeToken.of(parameterTypes[0])).isPresentAndNonNull();
-
+                return tryMatchSingleParameterMethod(input, argument).isPresent();
             }
         };
     }
@@ -80,20 +78,33 @@ public class MethodCoercions {
      */
     public static Maybe<?> tryFindAndInvokeSingleParameterMethod(final Object instance, final String methodName, final Object argument) {
         Class<?> clazz = instance.getClass();
-        Iterable<Method> methods = Arrays.asList(clazz.getMethods());
-        Optional<Method> matchingMethod = Iterables.tryFind(methods, matchSingleParameterMethod(methodName, argument));
-        if (matchingMethod.isPresent()) {
-            Method method = matchingMethod.get();
-            Method accessibleMethod = Reflections.findAccessibleMethod(method).get();
-            try {
-                Type paramType = method.getGenericParameterTypes()[0];
-                Object coercedArgument = TypeCoercions.coerce(argument, TypeToken.of(paramType));
-                return Maybe.of(accessibleMethod.invoke(instance, coercedArgument));
-            } catch (IllegalAccessException | InvocationTargetException e) {
-                throw Exceptions.propagate(e);
+        Iterable<Method> methods = Iterables.filter(Arrays.asList(clazz.getMethods()), matchMethodByName(methodName));
+        Method method;
+        if (Iterables.isEmpty(methods)) {
+            return Maybe.absent("No method found named '"+methodName+"' on "+clazz.getName());
+        } else if (Iterables.size(methods) == 1) {
+            Maybe<Method> matchingMethod = tryMatchSingleParameterMethod(Iterables.getOnlyElement(methods), argument);
+            if (matchingMethod.isAbsent()) {
+                return matchingMethod;
+            } else {
+                method = matchingMethod.get();
             }
         } else {
-            return Maybe.absent();
+            Optional<Method> matchingMethod = Iterables.tryFind(methods, matchSingleParameterMethod(methodName, argument));
+            if (matchingMethod.isPresent()) {
+                method = matchingMethod.get();
+            } else {
+                return Maybe.absent("No method '"+methodName+"' matching supplied arguments on "+instance);
+            }
+        }
+
+        Method accessibleMethod = Reflections.findAccessibleMethod(method).get();
+        try {
+            Type paramType = method.getGenericParameterTypes()[0];
+            Object coercedArgument = TypeCoercions.coerce(argument, TypeToken.of(paramType));
+            return Maybe.of(accessibleMethod.invoke(instance, coercedArgument));
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw Exceptions.propagate(e);
         }
     }
     
@@ -142,17 +153,42 @@ public class MethodCoercions {
             @Override
             public boolean apply(@Nullable Method input) {
                 if (input == null) return false;
-                int numOptionParams = arguments.size();
-                Type[] parameterTypes = input.getGenericParameterTypes();
-                if (parameterTypes.length != numOptionParams) return false;
-
-                for (int paramCount = 0; paramCount < numOptionParams; paramCount++) {
-                    if (!TypeCoercions.tryCoerce(((List<?>) arguments).get(paramCount),
-                            TypeToken.of(parameterTypes[paramCount])).isPresent()) return false;
-                }
-                return true;
+                return tryMatchMultiParameterMethod(input, arguments).isPresent();
             }
         };
+    }
+
+    private static Maybe<Method> tryMatchMultiParameterMethod(Method method, final List<?> arguments) {
+        checkNotNull(method, "method");
+        checkNotNull(arguments, "arguments");
+
+        int numOptionParams = arguments.size();
+        Type[] parameterTypes = method.getGenericParameterTypes();
+        if (parameterTypes.length != numOptionParams) {
+            return Maybe.absent("Incorrect number of arguments to '"+method.getName()+"' (given "+numOptionParams+", expected "+parameterTypes.length+")");
+        }
+
+        for (int paramCount = 0; paramCount < numOptionParams; paramCount++) {
+            Object arg = ((List<?>) arguments).get(paramCount);
+            if (tryCoerce(arg, parameterTypes[paramCount]).isAbsent()) {
+                return Maybe.absent("Parameter "+paramCount+" does not match type "+parameterTypes[paramCount]);
+            }
+        }
+        return Maybe.of(method);
+    }
+
+    private static Maybe<Method> tryMatchSingleParameterMethod(Method method, final Object argument) {
+        checkNotNull(method, "method");
+        checkNotNull(argument, "argument");
+
+        Type[] parameterTypes = method.getGenericParameterTypes();
+        if (parameterTypes.length != 1) {
+            return Maybe.absent("Incorrect number of arguments to '"+method.getName()+"' (expected "+parameterTypes.length+")");
+        } else if (tryCoerce(argument, parameterTypes[0]).isAbsentOrNull()) {
+            return Maybe.absent("Parameter does not match type "+parameterTypes[0]);
+        } else {
+            return Maybe.of(method);
+        }
     }
 
     /**
@@ -165,24 +201,37 @@ public class MethodCoercions {
      * @return the result of the method call, or {@link org.apache.brooklyn.util.guava.Maybe#absent()} if method could not be matched.
      */
     public static Maybe<?> tryFindAndInvokeMultiParameterMethod(Object instanceOrClazz, Iterable<Method> methods, List<?> arguments) {
-        Optional<Method> matchingMethod = Iterables.tryFind(methods, matchMultiParameterMethod(arguments));
-        if (matchingMethod.isPresent()) {
-            Method method = matchingMethod.get();
-            Method accessibleMethod = Reflections.findAccessibleMethod(method).get();
-            try {
-                int numOptionParams = ((List<?>)arguments).size();
-                Object[] coercedArguments = new Object[numOptionParams];
-                for (int paramCount = 0; paramCount < numOptionParams; paramCount++) {
-                    Object argument = arguments.get(paramCount);
-                    Type paramType = method.getGenericParameterTypes()[paramCount];
-                    coercedArguments[paramCount] = TypeCoercions.coerce(argument, TypeToken.of(paramType));
-                }
-                return Maybe.of(accessibleMethod.invoke(instanceOrClazz, coercedArguments));
-            } catch (IllegalAccessException | InvocationTargetException e) {
-                throw Exceptions.propagate(e);
+        Method method;
+        if (Iterables.isEmpty(methods)) {
+            return Maybe.absent("No supplied methods to choose from on "+instanceOrClazz);
+        } else if (Iterables.size(methods) == 1) {
+            Maybe<Method> matchingMethod = tryMatchMultiParameterMethod(Iterables.getOnlyElement(methods), arguments);
+            if (matchingMethod.isAbsent()) {
+                return matchingMethod;
+            } else {
+                method = matchingMethod.get();
             }
         } else {
-            return Maybe.absent();
+            Optional<Method> matchingMethod = Iterables.tryFind(methods, matchMultiParameterMethod(arguments));
+            if (matchingMethod.isPresent()) {
+                method = matchingMethod.get();
+            } else {
+                return Maybe.absent("No method matching supplied arguments on "+instanceOrClazz);
+            }
+        }
+        
+        Method accessibleMethod = Reflections.findAccessibleMethod(method).get();
+        try {
+            int numOptionParams = ((List<?>)arguments).size();
+            Object[] coercedArguments = new Object[numOptionParams];
+            for (int paramCount = 0; paramCount < numOptionParams; paramCount++) {
+                Object argument = arguments.get(paramCount);
+                Type paramType = method.getGenericParameterTypes()[paramCount];
+                coercedArguments[paramCount] = TypeCoercions.coerce(argument, TypeToken.of(paramType));
+            }
+            return Maybe.of(accessibleMethod.invoke(instanceOrClazz, coercedArguments));
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw Exceptions.propagate(e);
         }
     }
     
@@ -198,6 +247,9 @@ public class MethodCoercions {
     public static Maybe<?> tryFindAndInvokeMultiParameterMethod(Object instance, String methodName, List<?> arguments) {
         Class<?> clazz = instance.getClass();
         Iterable<Method> methods = Iterables.filter(Arrays.asList(clazz.getMethods()), matchMethodByName(methodName));
+        if (Iterables.isEmpty(methods)) {
+            return Maybe.absent("No method found named '"+methodName+"' on "+clazz.getName());
+        }
         return tryFindAndInvokeMultiParameterMethod(instance, methods, arguments);
     }
 
@@ -215,14 +267,32 @@ public class MethodCoercions {
 
             // ambiguous case: we can't tell if the user is using the multi-parameter syntax, or the single-parameter
             // syntax for a method which takes a List parameter. So we try one, then fall back to the other.
+            // Prefer the multi-parameter error message!
 
             Maybe<?> maybe = tryFindAndInvokeMultiParameterMethod(instance, methodName, arguments);
-            if (maybe.isAbsent())
-                maybe = tryFindAndInvokeSingleParameterMethod(instance, methodName, argument);
-
+            if (maybe.isAbsent()) {
+                Maybe<?> maybe2 = tryFindAndInvokeSingleParameterMethod(instance, methodName, argument);
+                if (maybe2.isPresent()) {
+                    maybe = maybe2;
+                }
+            }
             return maybe;
         } else {
             return tryFindAndInvokeSingleParameterMethod(instance, methodName, argument);
+        }
+    }
+    
+    private static Maybe<?> tryCoerce(Object val, Type type) {
+        return tryCoerce(val, TypeToken.of(type));
+    }
+    
+    // TODO I [Aled] thought TypeCoercions.tryCoerce would not throw ClassCoercionException, but it does:
+    //   TypeCoercions.tryCoerce("not a number", TypeToken.of(Integer.class));
+    private static Maybe<?> tryCoerce(Object val, TypeToken<?> type) {
+        try {
+            return TypeCoercions.tryCoerce(val, type);
+        } catch (ClassCoercionException e) {
+            return Maybe.absent(e);
         }
     }
 }

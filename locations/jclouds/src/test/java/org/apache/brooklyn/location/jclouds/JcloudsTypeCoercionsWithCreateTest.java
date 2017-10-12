@@ -67,6 +67,18 @@ public class JcloudsTypeCoercionsWithCreateTest {
     }
 
     @Test
+    public void testFailsIfWrongType() {
+        try {
+            coerce(ImmutableMap.builder().put("boolArg", "not a boolean").put("byteArg", (byte)1).put("shortArg", (short)2)
+                    .put("intArg", (int)3).put("longArg", (long)4).put("floatArg", (float)5.0)
+                    .put("doubleArg", (double)6.0).build(), MyClazzWithPrimitives.class);
+            Asserts.shouldHaveFailedPreviously();
+        } catch (ClassCoercionException e) {
+            Asserts.expectedFailureContains(e, "Parameter 0 does not match type boolean");
+        }
+    }
+
+    @Test
     public void testCallsCreateWithPrimitives() {
         assertEquals(
                 coerce(ImmutableMap.builder().put("boolArg", true).put("byteArg", (byte)1).put("shortArg", (short)2)

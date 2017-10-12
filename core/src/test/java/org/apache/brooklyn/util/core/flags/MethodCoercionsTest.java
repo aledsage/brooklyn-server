@@ -24,13 +24,16 @@ import static org.testng.Assert.assertTrue;
 import java.lang.reflect.Method;
 import java.util.List;
 
+import org.apache.brooklyn.test.Asserts;
 import org.apache.brooklyn.util.exceptions.Exceptions;
 import org.apache.brooklyn.util.guava.Maybe;
 import org.testng.annotations.BeforeClass;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
+import com.google.common.reflect.TypeToken;
 
 public class MethodCoercionsTest {
 
@@ -38,8 +41,10 @@ public class MethodCoercionsTest {
     private Method singleParameterMethod;
     private Method multiParameterMethod;
     private Method singleCollectionParameterMethod;
+    
+    private TestClass instance;
 
-    @BeforeClass
+    @BeforeClass(alwaysRun=true)
     public void testFixtureSetUp() {
         try {
             staticMultiParameterMethod = TestClass.class.getMethod("staticMultiParameterMethod", boolean.class, int.class);
@@ -51,6 +56,11 @@ public class MethodCoercionsTest {
         }
     }
 
+    @BeforeMethod(alwaysRun=true)
+    public void setUp() {
+        instance = new TestClass();
+    }
+    
     @Test
     public void testMatchSingleParameterMethod() throws Exception {
         Predicate<Method> predicate = MethodCoercions.matchSingleParameterMethod("singleParameterMethod", "42");
@@ -93,7 +103,6 @@ public class MethodCoercionsTest {
 
     @Test
     public void testTryFindAndInvokeMultiParameterMethod() throws Exception {
-        TestClass instance = new TestClass();
         Maybe<?> maybe = MethodCoercions.tryFindAndInvokeMultiParameterMethod(instance, "multiParameterMethod", ImmutableList.of("true", "42"));
         assertTrue(maybe.isPresent());
         assertTrue(instance.wasMultiParameterMethodCalled());
@@ -111,19 +120,22 @@ public class MethodCoercionsTest {
     }
 
     @Test
-    public void testTryFindAndInvokeBestMatchingMethod() throws Exception {
-        TestClass instance = new TestClass();
+    public void testTryFindAndInvokeBestMatchingSingleParamMethod() throws Exception {
         Maybe<?> maybe = MethodCoercions.tryFindAndInvokeBestMatchingMethod(instance, "singleParameterMethod", "42");
         assertTrue(maybe.isPresent());
         assertTrue(instance.wasSingleParameterMethodCalled());
-
-        instance = new TestClass();
-        maybe = MethodCoercions.tryFindAndInvokeBestMatchingMethod(instance, "multiParameterMethod", ImmutableList.of("true", "42"));
+    }
+    
+    @Test
+    public void testTryFindAndInvokeBestMatchingMultiParamMethod() throws Exception {
+        Maybe<?> maybe = MethodCoercions.tryFindAndInvokeBestMatchingMethod(instance, "multiParameterMethod", ImmutableList.of("true", "42"));
         assertTrue(maybe.isPresent());
         assertTrue(instance.wasMultiParameterMethodCalled());
-
-        instance = new TestClass();
-        maybe = MethodCoercions.tryFindAndInvokeBestMatchingMethod(instance, "singleCollectionParameterMethod", ImmutableList.of("fred", "joe"));
+    }
+    
+    @Test
+    public void testTryFindAndInvokeBestMatchingSingleListParamMethod() throws Exception {
+        Maybe<?> maybe = MethodCoercions.tryFindAndInvokeBestMatchingMethod(instance, "singleCollectionParameterMethod", ImmutableList.of("fred", "joe"));
         assertTrue(maybe.isPresent());
         assertTrue(instance.wasSingleCollectionParameterMethodCalled());
     }
@@ -142,7 +154,6 @@ public class MethodCoercionsTest {
 
     @Test
     public void testTryFindAndInvokeSingleParameterMethod() throws Exception {
-        TestClass instance = new TestClass();
         Maybe<?> maybe = MethodCoercions.tryFindAndInvokeSingleParameterMethod(instance, "singleParameterMethod", "42");
         assertTrue(maybe.isPresent());
         assertTrue(instance.wasSingleParameterMethodCalled());
@@ -150,10 +161,33 @@ public class MethodCoercionsTest {
 
     @Test
     public void testTryFindAndInvokeSingleCollectionParameterMethod() throws Exception {
-        TestClass instance = new TestClass();
         Maybe<?> maybe = MethodCoercions.tryFindAndInvokeSingleParameterMethod(instance, "singleCollectionParameterMethod", ImmutableList.of("42"));
         assertTrue(maybe.isPresent());
         assertTrue(instance.wasSingleCollectionParameterMethodCalled());
+    }
+
+    @Test
+    public void testErrorMessageForWrongParamType() throws Exception {
+        Maybe<?> maybe = MethodCoercions.tryFindAndInvokeBestMatchingMethod(instance, "multiParameterMethod", ImmutableList.of(true, "not a number"));
+        assertHasError(maybe, "Parameter 1 does not match type int");
+    }
+
+    @Test
+    public void testErrorMessageForWrongNumberParams() throws Exception {
+        Maybe<?> maybe = MethodCoercions.tryFindAndInvokeBestMatchingMethod(instance, "multiParameterMethod", ImmutableList.of(true, "1", "2", "3"));
+        assertHasError(maybe, "Incorrect number of arguments to 'multiParameterMethod' (given 4, expected 2)");
+    }
+
+    @Test
+    public void testErrorMessageForWrongMethodName() throws Exception {
+        Maybe<?> maybe = MethodCoercions.tryFindAndInvokeBestMatchingMethod(instance, "wrongNameOfMethod", ImmutableList.of());
+        assertHasError(maybe, "No method found named 'wrongNameOfMethod'");
+    }
+
+    private void assertHasError(Maybe<?> maybe, String phrase1ToContain, String... optionalOtherPhrasesToContain) throws Exception {
+        assertTrue(maybe.isAbsent());
+        RuntimeException exception = Maybe.getException(maybe);
+        Asserts.expectedFailureContains(exception, phrase1ToContain, optionalOtherPhrasesToContain);
     }
 
     public static class TestClass {
