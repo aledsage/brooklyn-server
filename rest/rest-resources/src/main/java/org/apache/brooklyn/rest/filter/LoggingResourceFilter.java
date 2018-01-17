@@ -59,6 +59,9 @@ public class LoggingResourceFilter implements ContainerRequestFilter, ContainerR
      *    deploying an app, rather than anything about the yaml of the app being deployed.
      *  - Should we have separate loggers for request headers etc (so can be enabled/disabled
      *    more easily by configuring logging levels)?
+     *  - The correlationId is not guaranteed unique - by using `System.identityHashCode` it is
+     *    based on the memory address, so no two objects will have the same value at the same time
+     *    but the value could repeat.
      */
 
     private enum LogLevel {
@@ -98,7 +101,7 @@ public class LoggingResourceFilter implements ContainerRequestFilter, ContainerR
         boolean isInteresting = !UNINTERESTING_METHODS.contains(method.toUpperCase());
         LogLevel logLevel = isInteresting ? LogLevel.DEBUG : LogLevel.TRACE;
         
-        logRequest(requestContext, logLevel);
+        logRequest(requestContext, System.identityHashCode(servletRequest), logLevel);
     }
 
     @Override
@@ -115,10 +118,10 @@ public class LoggingResourceFilter implements ContainerRequestFilter, ContainerR
                 || (requestDuration != null && requestDuration.isLongerThan(REQUEST_DURATION_LOG_POINT));
         LogLevel logLevel = isInteresting ? LogLevel.DEBUG : LogLevel.TRACE;
 
-        logResponse(requestContext, responseContext, requestDuration, logLevel);
+        logResponse(requestContext, responseContext, System.identityHashCode(servletRequest), requestDuration, logLevel);
     }
 
-    private void logRequest(ContainerRequestContext requestContext, LogLevel level) {
+    private void logRequest(ContainerRequestContext requestContext, int correlationId, LogLevel level) {
         if (!isLogEnabled(LOG, level)) return;
         
         String method = requestContext.getMethod();
@@ -137,12 +140,13 @@ public class LoggingResourceFilter implements ContainerRequestFilter, ContainerR
                 .append(" from ")
                 .append(userName)
                 .append(" @ ")
-                .append(remoteAddr);
+                .append(remoteAddr)
+                .append(" (correlationId=" + correlationId + ")");
 
         log(LOG, level, message.toString());
     }
 
-    private void logResponse(ContainerRequestContext requestContext, ContainerResponseContext responseContext, Duration requestDuration, LogLevel level) {
+    private void logResponse(ContainerRequestContext requestContext, ContainerResponseContext responseContext, int correlationId, Duration requestDuration, LogLevel level) {
         if (!isLogEnabled(LOG, level)) return;
         
         int status = responseContext.getStatus();
@@ -170,7 +174,8 @@ public class LoggingResourceFilter implements ContainerRequestFilter, ContainerR
                 .append(" from ")
                 .append(userName)
                 .append(" @ ")
-                .append(remoteAddr);
+                .append(remoteAddr)
+                .append(" (correlationId=" + correlationId + ")");
 
         if (!queryParams.isEmpty()) {
             message.append(", queryParams: {");
