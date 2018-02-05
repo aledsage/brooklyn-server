@@ -27,11 +27,9 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.brooklyn.util.repeat.Repeater;
 import org.apache.brooklyn.util.time.Duration;
 import org.testng.annotations.Test;
 
-import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.Callables;
 
 public class RepeaterTest {
@@ -157,36 +155,6 @@ public class RepeaterTest {
             .limitIterationsTo(5)
             .run());
         assertEquals(iterations.get(), 5);
-    }
-
-    /**
-     * Check that the {@link Repeater} will stop after a time limit.
-     *
-     * The repeater is configured to run every 100ms and never stop until the limit is reached.
-     * This is given as {@link Repeater#limitTimeTo(org.apache.brooklyn.util.time.Duration)} and the execution time
-     * is then checked to ensure it is between 100% and 400% of the specified value. Due to scheduling
-     * delays and other factors in a non RTOS system it is expected that the repeater will take much
-     * longer to exit occasionally.
-     *
-     * @see #runRespectsMaximumIterationLimitAndReturnsFalseIfReached()
-     */
-    @Test(groups="Integration")
-    public void runRespectsTimeLimitAndReturnsFalseIfReached() {
-        final long LIMIT = 2000l;
-        Repeater repeater = new Repeater("runRespectsTimeLimitAndReturnsFalseIfReached")
-            .every(Duration.millis(100))
-            .until(Callables.returning(false))
-            .limitTimeTo(LIMIT, TimeUnit.MILLISECONDS);
-
-        Stopwatch stopwatch = Stopwatch.createStarted();
-        boolean result = repeater.run();
-        stopwatch.stop();
-
-        assertFalse(result);
-
-        long difference = stopwatch.elapsed(TimeUnit.MILLISECONDS);
-        assertTrue(difference >= LIMIT, "Difference was: " + difference);
-        assertTrue(difference < 4 * LIMIT, "Difference was: " + difference);
     }
 
     @Test(expectedExceptions = { NullPointerException.class })

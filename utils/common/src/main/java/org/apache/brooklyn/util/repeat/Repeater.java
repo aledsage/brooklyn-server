@@ -203,13 +203,21 @@ public class Repeater implements Callable<Boolean> {
     }
 
     /**
+     * @see #backoff(Duration, double, Duration, Jitterer), but with no jitter.
+     */
+    public Repeater backoff(final Duration initialDelay, final double multiplier, @Nullable final Duration finalDelay) {
+        return backoff(initialDelay, multiplier, finalDelay, Jitterer.NONE);
+    }
+    
+    /**
      * Sets the {@link #delayOnIteration(Function)} function to be an exponential backoff.
      *
      * @param initialDelay  the delay on the first iteration, after the initial check
      * @param multiplier  the rate at which to increase the loop delay, must be >= 1
      * @param finalDelay  an optional cap on the loop delay
+     * @param jitterer  an optional jitter generator to be added (which can take the value above 'finalDelay')
      */
-    public Repeater backoff(final Duration initialDelay, final double multiplier, @Nullable final Duration finalDelay) {
+    public Repeater backoff(final Duration initialDelay, final double multiplier, @Nullable final Duration finalDelay, Jitterer jitterer) {
         Preconditions.checkNotNull(initialDelay, "initialDelay");
         Preconditions.checkArgument(multiplier>=1.0, "multiplier >= 1.0");
         return delayOnIteration(new Function<Integer, Duration>() {
@@ -221,8 +229,13 @@ public class Repeater implements Callable<Boolean> {
                 Duration result = initialDelay;
                 for (int i=0; i<iteration; i++) {
                     result = result.multiply(multiplier);
-                    if (finalDelay!=null && result.compareTo(finalDelay)>0)
-                        return finalDelay;
+                    if (finalDelay!=null && result.compareTo(finalDelay) > 0) {
+                        result = finalDelay;
+                        break;
+                    }
+                }
+                if (jitterer != null) {
+                    result = jitterer.jitter(iteration, result);
                 }
                 return result;
             }
