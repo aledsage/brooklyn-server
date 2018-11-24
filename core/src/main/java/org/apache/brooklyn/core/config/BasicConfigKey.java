@@ -39,6 +39,7 @@ import org.apache.brooklyn.util.core.task.Tasks;
 import org.apache.brooklyn.util.core.task.ValueResolver;
 import org.apache.brooklyn.util.exceptions.Exceptions;
 import org.apache.brooklyn.util.guava.TypeTokens;
+import org.apache.brooklyn.util.javalang.JavaClassNames;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -475,6 +476,26 @@ public class BasicConfigKey<T> implements ConfigKeySelfExtracting<T>, Serializab
         
         public ConfigKey<T> getParentKey() {
             return parentKey;
+        }
+        
+        @Override
+        public T extractValue(Map<?, ?> vals, ExecutionContext exec) {
+            // if we are unsure and want to log both, then
+            T v1, v2 = null;
+            if (parentKey instanceof BasicConfigKey<?>) {
+                v2 = ((BasicConfigKey<T>)parentKey).extractValue(vals, exec);
+                return v2;
+            }
+            v1 = super.extractValue(vals, exec);
+            // uncomment the "return v2" above, and these lines below, if we want to reenable reporting
+            // of cases where these values are different.  based on spot-checks and thinking it through,
+            // i (alex) think v2 is always correct if applicable, but leaving this in for a while after 2018-11
+            // in case it warrants further investigation.
+//            if (v2!=null && !Objects.equal(v1, v2)) {
+//                log.warn("Different values extracted for "+this+": "+v1+" ("+JavaClassNames.cleanSimpleClassName(v1)+") / "+v2+" ("+JavaClassNames.cleanSimpleClassName(v2)+")");
+//                return v2;
+//            }
+            return v1;
         }
     }
 }

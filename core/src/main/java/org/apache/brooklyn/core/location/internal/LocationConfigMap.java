@@ -89,7 +89,7 @@ public class LocationConfigMap extends AbstractConfigMapImpl<Location> {
     }
 
     @Override
-    protected Object coerceConfigVal(ConfigKey<?> key, Object v) {
+    protected Object coerceConfigValOnWrite(ConfigKey<?> key, Object v) {
         if ((Class.class.isAssignableFrom(key.getType()) || Function.class.isAssignableFrom(key.getType())) && v instanceof String) {
             // strings can be written where classes/functions are permitted; 
             // this because an occasional pattern only for locations because validation wasn't enforced there
@@ -98,7 +98,7 @@ public class LocationConfigMap extends AbstractConfigMapImpl<Location> {
             return v;
         }
         
-        return super.coerceConfigVal(key, v);
+        return super.coerceConfigValOnWrite(key, v);
     }
 
     @Override

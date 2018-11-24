@@ -44,6 +44,7 @@ import org.apache.brooklyn.core.config.ConfigKeys;
 import org.apache.brooklyn.core.config.ConfigKeys.InheritanceContext;
 import org.apache.brooklyn.core.config.Sanitizer;
 import org.apache.brooklyn.core.config.StructuredConfigKey;
+import org.apache.brooklyn.core.config.BasicConfigKey.BasicConfigKeyOverwriting;
 import org.apache.brooklyn.core.objs.BrooklynObjectInternal;
 import org.apache.brooklyn.util.collections.MutableList;
 import org.apache.brooklyn.util.collections.MutableMap;
@@ -177,7 +178,7 @@ public abstract class AbstractConfigMapImpl<TContainer extends BrooklynObject> i
         ConfigKey<?> ownKey = getKeyAtContainer(getContainer(), key);
         if (ownKey==null) ownKey = key;
 
-        Object val = coerceConfigVal(ownKey, v);
+        Object val = coerceConfigValOnWrite(ownKey, v);
         Object oldVal;
         if (ownKey instanceof StructuredConfigKey) {
             oldVal = ((StructuredConfigKey)ownKey).applyValueToMap(val, ownConfig);
@@ -248,17 +249,48 @@ public abstract class AbstractConfigMapImpl<TContainer extends BrooklynObject> i
         return getParentInternal().config().getInternalConfigMap().getConfigRaw(key, includeInherited);
     }
 
-    protected Object coerceConfigVal(ConfigKey<?> key, Object v) {
+    // In general we coerce on write to detect errors fast, but there are a lot of exceptions
+    // where we aren't strict on write, such as deferred suppliers and deep config.
+    protected Object coerceConfigValOnWrite(ConfigKey<?> key, Object v) {
         if ((v instanceof Future) || (v instanceof DeferredSupplier) || (v instanceof TaskFactory)) {
             // no coercion for these (coerce on exit)
             return v;
-        } else if (key instanceof StructuredConfigKey) {
-            // no coercion for these structures (they decide what to do)
+        } else if (isStructuredKey(key)) {
+            // no coercion for these structures (they decide what coercion to enforce when elements are set)
             return v;
-        } else if ((v instanceof Map || v instanceof Iterable) && key.getType().isInstance(v)) {
-            // don't do coercion on put for these, if the key type is compatible, 
-            // because that will force resolution deeply
+        } else if (v instanceof Map && key.getType().isInstance(v)) {
+            // don't do coercion on put for maps, as we may have deferred suppliers internally
+            // (we could implement deep coercion which excludes futures but not realllly needed)
             return v;
+        } else if (v instanceof Iterable && Iterable.class.isAssignableFrom(key.getType())) {
+            // as for maps, but do handle set/list differences
+            // (prior to 2018-11 we applied the same check as for Map for Iterable, which meant
+            // setting a List in a ConfigKey<Set> did not come in to this block, but rather it
+            // fell through to the coercion block below; if the list had a Future in it, and
+            // were being asked to coerce to a Set<String>, it would of course fail to coerce,
+            // and no attempt would be made to coerce to a Set<?>; on read it will attempt to coerce 
+            // the values to String but it would not coerce the List to a Set; it never happened arose
+            // as a problem IRL because we were good about using SetConfigKey, but the addition of tests of
+            // TestEntity.CONF_SET_STRING_PLAIN demonstrated the problem in existing code that was revealed
+            // by setting defaults and using BasicConfigKeyOverwriting; the new logic below corrects this problem
+            try {
+                // try to coerce on input, to detect errors sooner
+                return TypeCoercions.coerce(v, key.getTypeToken());
+            } catch (Exception e) {
+                // could not coerce, something in the iterable is not coercible;
+                // for now however assume it is a future and proceed without flagging an error
+                if (key.getType().isInstance(v)) {
+                    return v;
+                }
+                if (key.getType().isAssignableFrom(MutableList.class)) {
+                    return MutableList.copyOf((Iterable<?>)v).asUnmodifiable();
+                }
+                if (key.getType().isAssignableFrom(MutableSet.class)) {
+                    return MutableSet.copyOf((Iterable<?>)v).asUnmodifiable();
+                }
+                // it's a weird sort of collection-to-collection mapping, so just fail
+                throw new IllegalArgumentException("Cannot coerce or set iterable types, "+v+" to "+key, e);
+            }
         } else {
             try {
                 // try to coerce on input, to detect errors sooner
@@ -275,6 +307,15 @@ public abstract class AbstractConfigMapImpl<TContainer extends BrooklynObject> i
         }
     }
 
+    private boolean isStructuredKey(ConfigKey<?> key) {
+        // check if it is structured _or effectively so_
+        if (key instanceof StructuredConfigKey) return true;
+        if (key instanceof BasicConfigKeyOverwriting<?>) {
+            return isStructuredKey(((BasicConfigKeyOverwriting<?>)key).getParentKey());
+        }
+        return false;
+    }
+    
     @Override
     public Map<String,Object> asMapWithStringKeys() {
         return mapViewWithStringKeys;
