@@ -227,8 +227,28 @@ public class DslAndRebindYamlTest extends AbstractYamlRebindTest {
         //          <sensorName>foo</sensorName>
         //        </org.apache.brooklyn.camp.brooklyn.spi.dsl.methods.DslComponent_-AttributeWhenReady>
         //      </test.confName>
+        // may be longer if there is a constraint, inheritance, esp if it is a BasicConfigKeyOverwriting storing the parent's definition also, eg
+//      <org.apache.brooklyn.core.config.BasicConfigKey_-BasicConfigKeyOverwriting>
+//        <name>test.confName</name>
+//        <deprecatedNames class="ImmutableList" reference="../../../../searchPath"/>
+//        <type>java.lang.String</type>
+//        <description>Configuration key, my name</description>
+//        <defaultValue class="org.apache.brooklyn.camp.brooklyn.spi.dsl.methods.DslComponent$AttributeWhenReady" reference="../../../../config/test.confName/org.apache.brooklyn.camp.brooklyn.spi.dsl.methods.DslComponent_-AttributeWhenReady"/>
+//        <reconfigurable>false</reconfigurable>
+//        <constraint class="com.google.common.base.Predicates$ObjectPredicate">ALWAYS_TRUE</constraint>
+//        <parentKey class="configKey">
+//          <name>test.confName</name>
+//          <deprecatedNames class="ImmutableList" reference="../../../../../searchPath"/>
+//          <type>java.lang.String</type>
+//          <description>Configuration key, my name</description>
+//          <defaultValue class="string">defaultval</defaultValue>
+//          <reconfigurable>false</reconfigurable>
+//          <constraint class="com.google.common.base.Predicates$ObjectPredicate">ALWAYS_TRUE</constraint>
+//        </parentKey>
+//      </org.apache.brooklyn.core.config.BasicConfigKey_-BasicConfigKeyOverwriting>
+        
 
-        Assert.assertTrue(testConfNamePersistedState.length() < 400, "persisted state too long: " + testConfNamePersistedState);
+        Assert.assertTrue(testConfNamePersistedState.length() < 1600, "persisted state too long ("+testConfNamePersistedState.length()+"): " + testConfNamePersistedState);
         
         Assert.assertFalse(testConfNamePersistedState.contains("bar"), "value 'bar' leaked in persisted state");
     }

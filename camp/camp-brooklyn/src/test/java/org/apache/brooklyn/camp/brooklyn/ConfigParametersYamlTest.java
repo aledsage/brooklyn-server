@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -175,7 +176,12 @@ public class ConfigParametersYamlTest extends AbstractYamlRebindTest {
     // it was using the `MapConfigKey`. Unfortunately the `MapConfigKey` uses a different structure
     // for storing its data (flattening out the map). So the subsequent lookup failed.
     //
-    // There are three parts to fixing this:
+    // 2018-11 This is now working as the BasicConfigKey<Map> acts better;
+    // however more complicated tests could be written for inconsistencies between YAML "Map"
+    // parameters (ie BasicConfigKey<Map>) and java MapConfigKey.
+    // Remember these notes if we encounter those!
+    // 
+    // These are the anticipated steps to fixing this better:
     //  1. [DONE] In `entity.config().set(key, val)`, replace `key` with the entity's own key  
     //     (i.e. the same logic that will subsequently be used in the `get`).
     //  2. [DONE] In `BrooklynComponentTemplateResolver.findAllFlagsAndConfigKeyValues`, respect  
@@ -186,19 +192,7 @@ public class ConfigParametersYamlTest extends AbstractYamlRebindTest {
     //  4. [TODO] Major overhaul of the ConfigKey name versus `SetFromFlag` alias. It is currently
     //     confusing in when reading the config values what the precedence is because there are 
     //     different names that are only understood by some things.
-    @Test(groups="Broken")
     public void testConfigParameterOverridingJavaMapConfigKey() throws Exception {
-        runConfigParameterOverridingJavaMapConfigKey(true);
-    }
-    
-    @Test
-    public void testConfigParameterOverridingJavaMapConfigKeyWithoutRebindValueCheck() throws Exception {
-        // A cut-down test of what is actually working just now (so we can detect any 
-        // further regressions!)
-        runConfigParameterOverridingJavaMapConfigKey(false);
-    }
-    
-    protected void runConfigParameterOverridingJavaMapConfigKey(boolean assertReboundVal) throws Exception {
         addCatalogItems(
                 "brooklyn.catalog:",
                 "  itemType: entity",
@@ -227,15 +221,7 @@ public class ConfigParametersYamlTest extends AbstractYamlRebindTest {
         // Rebind, and then check again that the config key is listed
         Entity newApp = rebind();
         TestEntity newEntity = (TestEntity) Iterables.getOnlyElement(newApp.getChildren());
-        if (assertReboundVal) {
-            assertKeyEquals(newEntity, TestEntity.CONF_MAP_THING.getName(), "myDescription", java.util.Map.class, null, ImmutableMap.of("mykey", "myval"));
-        } else {
-            // TODO delete duplication from `assertKeyEquals`, when the above works!
-            ConfigKey<?> key = newEntity.getEntityType().getConfigKey(TestEntity.CONF_MAP_THING.getName());
-            assertEquals(key.getDescription(), "myDescription");
-            assertEquals(key.getType(), java.util.Map.class);
-            assertEquals(key.getDefaultValue(), null);
-        }
+        assertKeyEquals(newEntity, TestEntity.CONF_MAP_THING.getName(), "myDescription", java.util.Map.class, null, ImmutableMap.of("mykey", "myval"));
     }
     
     @Test
@@ -1357,16 +1343,22 @@ public class ConfigParametersYamlTest extends AbstractYamlRebindTest {
     public static class TestEntityWithPinnedConfigImpl extends TestEntityImpl implements TestEntityWithPinnedConfig {
     }
     
-    protected <T> void assertKeyEquals(Entity entity, String keyName, String expectedDescription, Class<T> expectedType, T expectedDefaultVal, T expectedEntityVal) {
+    protected <T> void assertKeyEquals(Entity entity, String keyName, String expectedDescription, Class<T> expectedType, T expectedDefaultValIfNoEntityVal, T expectedEntityVal) {
         ConfigKey<?> key = entity.getEntityType().getConfigKey(keyName);
         assertNotNull(key, "No key '"+keyName+"'; keys="+entity.getEntityType().getConfigKeys());
 
         assertEquals(key.getName(), keyName);
         assertEquals(key.getDescription(), expectedDescription);
         assertEquals(key.getType(), expectedType);
-        assertEquals(key.getDefaultValue(), expectedDefaultVal);
-        
         assertEquals(entity.config().get(key), expectedEntityVal);
+        
+        if (Objects.equals(key.getDefaultValue(), expectedEntityVal!=null ? expectedEntityVal : expectedDefaultValIfNoEntityVal)) {
+            // fine - if the entity has a value, we want the default value to have changed to be that actual value;
+            // this is because types defined in yaml, when subtyped, should see the value the parent set.
+            // if there is no value then the original default is expected.
+        } else {
+            Assert.fail("Default value for "+key+" not as expected: "+key.getDefaultValue());
+        }
     }
     
     @ImplementedBy(TestEntityWithUninheritedConfigImpl.class)
