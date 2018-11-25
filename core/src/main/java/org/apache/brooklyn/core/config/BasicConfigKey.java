@@ -39,7 +39,6 @@ import org.apache.brooklyn.util.core.task.Tasks;
 import org.apache.brooklyn.util.core.task.ValueResolver;
 import org.apache.brooklyn.util.exceptions.Exceptions;
 import org.apache.brooklyn.util.guava.TypeTokens;
-import org.apache.brooklyn.util.javalang.JavaClassNames;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -271,7 +270,10 @@ public class BasicConfigKey<T> implements ConfigKeySelfExtracting<T>, Serializab
 
     public BasicConfigKey(Builder<T,?> builder) {
         this.name = checkNotNull(builder.name, "name");
-        this.deprecatedNames = checkNotNull(builder.deprecatedNames, "deprecatedNames");
+        
+        this.deprecatedNames = builder.deprecatedNames;
+        getDeprecatedNames();  // invoke method to tidy up for persistence
+        
         TypeTokens.checkCompatibleOneNonNull(builder.type, builder.typeToken);
         this.type = builder.type;
         this.typeToken = builder.typeToken;
@@ -280,20 +282,28 @@ public class BasicConfigKey<T> implements ConfigKeySelfExtracting<T>, Serializab
         this.reconfigurable = builder.reconfigurable;
         this.runtimeInheritance = builder.runtimeInheritance;
         this.typeInheritance = builder.typeInheritance;
+        
         // Note: it's intentionally possible to have default values that are not valid
         // per the configured constraint. If validity were checked here any class that
         // contained a weirdly-defined config key would fail to initialise.
-        this.constraint = checkNotNull(builder.constraint, "constraint");
+        this.constraint = builder.constraint;
+        getConstraint();  // invoke method to tidy up for persistence
     }
 
     /** @see ConfigKey#getName() */
     @Override public String getName() { return name; }
 
     /** @see ConfigKey#getDeprecatedNames() */
-    @Override public Collection<String> getDeprecatedNames() {
-        // check for null, for backwards compatibility of serialized state
-        if (deprecatedNames == null) deprecatedNames = ImmutableList.of();
-        return deprecatedNames;
+    @Override public synchronized Collection<String> getDeprecatedNames() {
+        // check for empty list, for backwards compatibility of serialized state; prefer "null" so we don't get noise in serialised state
+        if (deprecatedNames!=null) {
+            if (deprecatedNames.isEmpty()) {
+                deprecatedNames = null;
+            } else {
+                return deprecatedNames;
+            }
+        }
+        return ImmutableList.of();
     }
 
     /** @see ConfigKey#getTypeName() */
@@ -375,13 +385,16 @@ public class BasicConfigKey<T> implements ConfigKeySelfExtracting<T>, Serializab
 
     /** @see ConfigKey#getConstraint() */
     @Override @Nonnull
-    public Predicate<? super T> getConstraint() {
-        // Could be null after rebinding
+    public synchronized Predicate<? super T> getConstraint() {
         if (constraint != null) {
-            return constraint;
-        } else {
-            return Predicates.alwaysTrue();
+            if (Predicates.alwaysTrue().equals(constraint)) {
+                // prefer null so persisted state is cleaner
+                constraint = null;
+            } else {
+                return constraint;
+            }
         }
+        return Predicates.alwaysTrue();
     }
 
     /** @see ConfigKey#isValueValid(T) */

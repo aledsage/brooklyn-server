@@ -18,7 +18,7 @@ under the License.
 -->
 
 <entity>
-  <brooklynVersion>0.10.0-SNAPSHOT</brooklynVersion>
+  <brooklynVersion>$VERSION</brooklynVersion>
   <type>org.apache.brooklyn.core.test.entity.TestApplicationNoEnrichersImpl</type>
   <id>kmpez5fznt</id>
   <displayName>TestApplicationNoEnrichersImpl:kmpe</displayName>
@@ -39,7 +39,6 @@ under the License.
         <type>java.lang.String</type>
         <reconfigurable>false</reconfigurable>
         <runtimeInheritance class="org.apache.brooklyn.core.config.BasicConfigInheritance$NeverInherited"/>
-        <constraint class="com.google.common.base.Predicates$ObjectPredicate">ALWAYS_TRUE</constraint>
       </configKey>
     </key1>
   </configKeys>
