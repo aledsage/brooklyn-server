@@ -356,7 +356,8 @@ public abstract class AbstractEntity extends AbstractBrooklynObject implements E
     }
 
     /**
-     * @deprecated since 0.7.0; only used for legacy brooklyn types where constructor is called directly
+     * @deprecated since 0.7.0; only used for legacy brooklyn types where constructor is called directly,
+     * (and used for internal private configuration from entity specs which use flags to set keys)
      */
     @Override
     @Deprecated

@@ -180,8 +180,9 @@ public abstract class AbstractConfigMapImpl<TContainer extends BrooklynObject> i
 
         Object val = coerceConfigValOnWrite(ownKey, v);
         Object oldVal;
-        if (ownKey instanceof StructuredConfigKey) {
-            oldVal = ((StructuredConfigKey)ownKey).applyValueToMap(val, ownConfig);
+        Maybe<StructuredConfigKey> structured = getStructuredKeyMaybe(ownKey); 
+        if (structured.isPresent()) {
+            oldVal = structured.get().applyValueToMap(val, ownConfig);
         } else {
             oldVal = ownConfig.put(ownKey, val);
         }
@@ -255,7 +256,7 @@ public abstract class AbstractConfigMapImpl<TContainer extends BrooklynObject> i
         if ((v instanceof Future) || (v instanceof DeferredSupplier) || (v instanceof TaskFactory)) {
             // no coercion for these (coerce on exit)
             return v;
-        } else if (isStructuredKey(key)) {
+        } else if (getStructuredKeyMaybe(key).isPresent()) {
             // no coercion for these structures (they decide what coercion to enforce when elements are set)
             return v;
         } else if (v instanceof Map && key.getType().isInstance(v)) {
@@ -307,13 +308,13 @@ public abstract class AbstractConfigMapImpl<TContainer extends BrooklynObject> i
         }
     }
 
-    private boolean isStructuredKey(ConfigKey<?> key) {
+    private Maybe<StructuredConfigKey> getStructuredKeyMaybe(ConfigKey<?> key) {
         // check if it is structured _or effectively so_
-        if (key instanceof StructuredConfigKey) return true;
+        if (key instanceof StructuredConfigKey) return Maybe.of((StructuredConfigKey)key);
         if (key instanceof BasicConfigKeyOverwriting<?>) {
-            return isStructuredKey(((BasicConfigKeyOverwriting<?>)key).getParentKey());
+            return getStructuredKeyMaybe(((BasicConfigKeyOverwriting<?>)key).getParentKey());
         }
-        return false;
+        return Maybe.absent();
     }
     
     @Override

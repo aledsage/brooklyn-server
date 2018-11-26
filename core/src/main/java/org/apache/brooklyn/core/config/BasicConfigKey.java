@@ -490,13 +490,21 @@ public class BasicConfigKey<T> implements ConfigKeySelfExtracting<T>, Serializab
         public ConfigKey<T> getParentKey() {
             return parentKey;
         }
+
+        @Override
+        public boolean isSet(Map<?,?> vals) {
+            if (parentKey instanceof ConfigKeySelfExtracting<?>) {
+                return ((ConfigKeySelfExtracting<T>)parentKey).isSet(vals);
+            }
+            return super.isSet(vals);
+        }
         
         @Override
         public T extractValue(Map<?, ?> vals, ExecutionContext exec) {
             // if we are unsure and want to log both, then
             T v1, v2 = null;
-            if (parentKey instanceof BasicConfigKey<?>) {
-                v2 = ((BasicConfigKey<T>)parentKey).extractValue(vals, exec);
+            if (parentKey instanceof ConfigKeySelfExtracting<?>) {
+                v2 = ((ConfigKeySelfExtracting<T>)parentKey).extractValue(vals, exec);
                 return v2;
             }
             v1 = super.extractValue(vals, exec);
