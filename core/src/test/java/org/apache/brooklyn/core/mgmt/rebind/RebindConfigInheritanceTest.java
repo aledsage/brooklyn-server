@@ -33,6 +33,7 @@ import org.apache.brooklyn.core.config.ConfigPredicates;
 import org.apache.brooklyn.core.entity.EntityAsserts;
 import org.apache.brooklyn.core.test.entity.TestEntity;
 import org.apache.brooklyn.test.Asserts;
+import org.apache.brooklyn.util.exceptions.Exceptions;
 import org.apache.brooklyn.util.os.Os;
 import org.apache.brooklyn.util.stream.Streams;
 import org.apache.brooklyn.util.text.Strings;
@@ -52,7 +53,7 @@ public class RebindConfigInheritanceTest extends RebindTestFixtureWithApp {
     private static final Logger log = LoggerFactory.getLogger(RebindConfigInheritanceTest.class);
 
     ConfigKey<String> key1 = ConfigKeys.builder(String.class, "key1").runtimeInheritance(BasicConfigInheritance.NEVER_INHERITED).build();
-    String origMemento, newMemento;
+    String inMementoRaw, expectedOutMemento, newMemento;
     Application rebindedApp;
     
     @Override
@@ -63,10 +64,20 @@ public class RebindConfigInheritanceTest extends RebindTestFixtureWithApp {
         
     protected void doReadConfigInheritance(String label, String entityId) throws Exception {
         String mementoFilename = "config-inheritance-"+label+"-"+entityId;
-        origMemento = Streams.readFullyString(getClass().getResourceAsStream(mementoFilename));
+        inMementoRaw = Streams.readFullyString(getClass().getResourceAsStream(mementoFilename));
         
         File persistedEntityFile = new File(mementoDir, Os.mergePaths("entities", entityId));
-        Files.write(origMemento.getBytes(), persistedEntityFile);
+        Files.write(inMementoRaw.getBytes(), persistedEntityFile);
+        try {
+            expectedOutMemento = Streams.readFullyString(getClass().getResourceAsStream(mementoFilename+"-out"));
+        } catch (Exception e) {
+            Exceptions.propagateIfFatal(e);
+            expectedOutMemento = inMementoRaw;
+        }
+        if (expectedOutMemento.startsWith("<!--")) {
+            expectedOutMemento = expectedOutMemento.substring(expectedOutMemento.indexOf("-->")+3).trim();
+        }
+        expectedOutMemento = Strings.replaceAllNonRegex(expectedOutMemento, "$VERSION", BrooklynVersion.get());
         
         // we'll make assertions on what we've loaded
         rebind();
@@ -84,8 +95,8 @@ public class RebindConfigInheritanceTest extends RebindTestFixtureWithApp {
         
         ConfigKey<?> k = Iterables.getOnlyElement( rebindedApp.config().findKeysDeclared(ConfigPredicates.nameEqualTo("my.config.inheritanceMerged")) );
         
-        Asserts.assertStringContains(origMemento, "<parentInheritance class=\"org.apache.brooklyn.config.ConfigInheritance$Merged\"/>");
-        Asserts.assertStringDoesNotContain(origMemento, BasicConfigInheritance.DEEP_MERGE.getClass().getName());
+        Asserts.assertStringContains(inMementoRaw, "<parentInheritance class=\"org.apache.brooklyn.config.ConfigInheritance$Merged\"/>");
+        Asserts.assertStringDoesNotContain(inMementoRaw, BasicConfigInheritance.DEEP_MERGE.getClass().getName());
 
         // should now convert it to BasicConfigInheritance.DEEP_MERGE
         Asserts.assertStringDoesNotContain(newMemento, "ConfigInheritance$Merged");
@@ -102,9 +113,9 @@ public class RebindConfigInheritanceTest extends RebindTestFixtureWithApp {
 
         checkNewAppNonInheritingKey1(rebindedApp);
         
-        Asserts.assertStringContains(origMemento, "isReinherited");
-        Asserts.assertStringDoesNotContain(origMemento, "NEVER_INHERITED");
-        Asserts.assertStringDoesNotContain(origMemento, "NeverInherited");
+        Asserts.assertStringContains(inMementoRaw, "isReinherited");
+        Asserts.assertStringDoesNotContain(inMementoRaw, "NEVER_INHERITED");
+        Asserts.assertStringDoesNotContain(inMementoRaw, "NeverInherited");
         
         // should write it out as NeverInherited
         Asserts.assertStringDoesNotContain(newMemento, "isReinherited");
@@ -116,9 +127,7 @@ public class RebindConfigInheritanceTest extends RebindTestFixtureWithApp {
         doReadConfigInheritance("basic-2016-11", "kmpez5fznt");
         checkNewAppNonInheritingKey1(rebindedApp);
         
-        String origMementoTidied = origMemento.substring(origMemento.indexOf("<entity>"));
-        origMementoTidied = Strings.replaceAllNonRegex(origMementoTidied, "VERSION", BrooklynVersion.get());
-        Asserts.assertEquals(origMementoTidied, newMemento.replaceAll("\n.*searchPath.*\n", "\n"));
+        Asserts.assertEquals(newMemento.replaceAll("\n.*searchPath.*\n", "\n"), expectedOutMemento);
     }
     
     @Test

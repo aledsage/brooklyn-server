@@ -270,7 +270,10 @@ public class BasicConfigKey<T> implements ConfigKeySelfExtracting<T>, Serializab
 
     public BasicConfigKey(Builder<T,?> builder) {
         this.name = checkNotNull(builder.name, "name");
-        this.deprecatedNames = checkNotNull(builder.deprecatedNames, "deprecatedNames");
+        
+        this.deprecatedNames = builder.deprecatedNames;
+        getDeprecatedNames();  // invoke method to tidy up for persistence
+        
         TypeTokens.checkCompatibleOneNonNull(builder.type, builder.typeToken);
         this.type = builder.type;
         this.typeToken = builder.typeToken;
@@ -279,20 +282,28 @@ public class BasicConfigKey<T> implements ConfigKeySelfExtracting<T>, Serializab
         this.reconfigurable = builder.reconfigurable;
         this.runtimeInheritance = builder.runtimeInheritance;
         this.typeInheritance = builder.typeInheritance;
+        
         // Note: it's intentionally possible to have default values that are not valid
         // per the configured constraint. If validity were checked here any class that
         // contained a weirdly-defined config key would fail to initialise.
-        this.constraint = checkNotNull(builder.constraint, "constraint");
+        this.constraint = builder.constraint;
+        getConstraint();  // invoke method to tidy up for persistence
     }
 
     /** @see ConfigKey#getName() */
     @Override public String getName() { return name; }
 
     /** @see ConfigKey#getDeprecatedNames() */
-    @Override public Collection<String> getDeprecatedNames() {
-        // check for null, for backwards compatibility of serialized state
-        if (deprecatedNames == null) deprecatedNames = ImmutableList.of();
-        return deprecatedNames;
+    @Override public synchronized Collection<String> getDeprecatedNames() {
+        // check for empty list, for backwards compatibility of serialized state; prefer "null" so we don't get noise in serialised state
+        if (deprecatedNames!=null) {
+            if (deprecatedNames.isEmpty()) {
+                deprecatedNames = null;
+            } else {
+                return deprecatedNames;
+            }
+        }
+        return ImmutableList.of();
     }
 
     /** @see ConfigKey#getTypeName() */
@@ -374,13 +385,16 @@ public class BasicConfigKey<T> implements ConfigKeySelfExtracting<T>, Serializab
 
     /** @see ConfigKey#getConstraint() */
     @Override @Nonnull
-    public Predicate<? super T> getConstraint() {
-        // Could be null after rebinding
+    public synchronized Predicate<? super T> getConstraint() {
         if (constraint != null) {
-            return constraint;
-        } else {
-            return Predicates.alwaysTrue();
+            if (Predicates.alwaysTrue().equals(constraint)) {
+                // prefer null so persisted state is cleaner
+                constraint = null;
+            } else {
+                return constraint;
+            }
         }
+        return Predicates.alwaysTrue();
     }
 
     /** @see ConfigKey#isValueValid(T) */
@@ -475,6 +489,34 @@ public class BasicConfigKey<T> implements ConfigKeySelfExtracting<T>, Serializab
         
         public ConfigKey<T> getParentKey() {
             return parentKey;
+        }
+
+        @Override
+        public boolean isSet(Map<?,?> vals) {
+            if (parentKey instanceof ConfigKeySelfExtracting<?>) {
+                return ((ConfigKeySelfExtracting<T>)parentKey).isSet(vals);
+            }
+            return super.isSet(vals);
+        }
+        
+        @Override
+        public T extractValue(Map<?, ?> vals, ExecutionContext exec) {
+            // if we are unsure and want to log both, then
+            T v1, v2 = null;
+            if (parentKey instanceof ConfigKeySelfExtracting<?>) {
+                v2 = ((ConfigKeySelfExtracting<T>)parentKey).extractValue(vals, exec);
+                return v2;
+            }
+            v1 = super.extractValue(vals, exec);
+            // uncomment the "return v2" above, and these lines below, if we want to reenable reporting
+            // of cases where these values are different.  based on spot-checks and thinking it through,
+            // i (alex) think v2 is always correct if applicable, but leaving this in for a while after 2018-11
+            // in case it warrants further investigation.
+//            if (v2!=null && !Objects.equal(v1, v2)) {
+//                log.warn("Different values extracted for "+this+": "+v1+" ("+JavaClassNames.cleanSimpleClassName(v1)+") / "+v2+" ("+JavaClassNames.cleanSimpleClassName(v2)+")");
+//                return v2;
+//            }
+            return v1;
         }
     }
 }

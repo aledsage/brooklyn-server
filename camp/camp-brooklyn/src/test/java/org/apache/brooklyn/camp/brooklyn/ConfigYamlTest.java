@@ -293,6 +293,8 @@ public class ConfigYamlTest extends AbstractYamlTest {
                 "    - $brooklyn:config(\"myOtherConf\")",
                 "    test.confSetPlain:",
                 "    - $brooklyn:config(\"myOtherConf\")",
+                "    test.confSetStringPlain:",
+                "    - $brooklyn:config(\"myOtherConf\")",
                 "    myOtherConf: myOther");
 
         final Entity app = createStartWaitAndLogApplication(yaml);
