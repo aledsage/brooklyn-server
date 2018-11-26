@@ -35,6 +35,7 @@ import org.apache.brooklyn.api.location.Location;
 import org.apache.brooklyn.api.sensor.AttributeSensor;
 import org.apache.brooklyn.config.ConfigKey;
 import org.apache.brooklyn.core.config.ConfigKeys;
+import org.apache.brooklyn.core.config.ConfigPredicates;
 import org.apache.brooklyn.core.config.MapConfigKey;
 import org.apache.brooklyn.core.entity.Entities;
 import org.apache.brooklyn.core.entity.EntityAsserts;
@@ -43,6 +44,7 @@ import org.apache.brooklyn.core.test.entity.TestEntity;
 import org.apache.brooklyn.core.test.entity.TestEntityImpl;
 import org.apache.brooklyn.entity.software.base.EmptySoftwareProcess;
 import org.apache.brooklyn.entity.stock.BasicApplication;
+import org.apache.brooklyn.test.Asserts;
 import org.apache.brooklyn.util.collections.MutableMap;
 import org.apache.brooklyn.util.core.internal.ssh.RecordingSshTool;
 import org.apache.brooklyn.util.os.Os;
@@ -741,7 +743,7 @@ public class ConfigInheritanceYamlTest extends AbstractYamlTest {
     }
 
     @Test
-    public void testExtendsSuperTypeConfigMixingLongOverridingShortNames() throws Exception {
+    public Entity testExtendsSuperTypeConfigMixingLongOverridingShortNames() throws Exception {
         ImmutableMap<String, Object> expectedEnv = ImmutableMap.<String, Object>of("ENV1", "myEnv1", "ENV2", "myEnv2");
 
         // super-type has env; sub-type shell.env
@@ -756,8 +758,21 @@ public class ConfigInheritanceYamlTest extends AbstractYamlTest {
         Entity app = createStartWaitAndLogApplication(yaml);
         Entity entity = Iterables.getOnlyElement(app.getChildren());
         EntityAsserts.assertConfigEquals(entity, EmptySoftwareProcess.SHELL_ENVIRONMENT, expectedEnv);
+        return entity;
     }
-        
+
+    /** EntitySpecs track flags and config separately, with the merge occurring on Entity creation,
+     * so from the spec alone it is not straightforward to include flags in the determination of the default value.
+     * Thus default values do _not_ include flags and this test has only the shell.env KV pair in the default
+     * (so size 1, not size 2 which we want) 
+     */
+    @Test(groups="Broken")
+    public void testDefaultValueWhenExtendingSuperTypeConfigMixingLongOverridingShortNames() throws Exception {
+        Entity entity = testExtendsSuperTypeConfigMixingLongOverridingShortNames();
+        ConfigKey<?> key = Iterables.getOnlyElement(entity.config().findKeysDeclared(ConfigPredicates.nameEqualTo(EmptySoftwareProcess.SHELL_ENVIRONMENT.getName())));
+        Asserts.assertSize((Map<?,?>)key.getDefaultValue(), 2);
+    }
+
     @Test
     public void testExtendsSuperTypeConfigMixingShortOverridingLongName() throws Exception {
         ImmutableMap<String, Object> expectedEnv = ImmutableMap.<String, Object>of("ENV1", "myEnv1", "ENV2", "myEnv2");
