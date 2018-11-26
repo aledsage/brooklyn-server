@@ -22,6 +22,7 @@ import static org.testng.Assert.assertEquals;
 
 import java.io.File;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -558,6 +559,9 @@ public class ConfigInheritanceYamlTest extends AbstractYamlTest {
                 "        type: java.util.Map",
                 "        inheritance.runtime: not_reinherited");
 
+        ImmutableMap<String, String> defaultKV = ImmutableMap.of("myDefaultKey", "myDefaultVal");
+        ImmutableMap<String, String> myKV = ImmutableMap.of("mykey", "myval");
+
         // Test retrieval of defaults
         {
             String yaml = Joiner.on("\n").join(
@@ -569,10 +573,10 @@ public class ConfigInheritanceYamlTest extends AbstractYamlTest {
             Entity app = createStartWaitAndLogApplication(yaml);
             TestEntity entity = (TestEntity) Iterables.getOnlyElement(app.getChildren());
     
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-merged", ImmutableMap.of("myDefaultKey", "myDefaultVal"));
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-overwrite", ImmutableMap.of("myDefaultKey", "myDefaultVal"));
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-never", ImmutableMap.of("myDefaultKey", "myDefaultVal"));
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-not-reinherited", ImmutableMap.of("myDefaultKey", "myDefaultVal"));
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-merged", defaultKV);
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-overwrite", defaultKV);
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-never", defaultKV);
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-not-reinherited", defaultKV);
         }
 
         // Test override defaults in parent entity
@@ -595,10 +599,10 @@ public class ConfigInheritanceYamlTest extends AbstractYamlTest {
             Entity app = createStartWaitAndLogApplication(yaml);
             TestEntity entity = (TestEntity) Iterables.getOnlyElement(app.getChildren());
     
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-merged", ImmutableMap.of("mykey", "myval"));
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-overwrite", ImmutableMap.of("mykey", "myval"));
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-never", ImmutableMap.of("myDefaultKey", "myDefaultVal"));
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-not-reinherited", ImmutableMap.of("mykey", "myval"));
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-merged", myKV);
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-overwrite", myKV);
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-never", defaultKV);
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(entity, "map.type-not-reinherited", myKV);
         }
 
         // Test merging/overriding of explicit config
@@ -651,28 +655,60 @@ public class ConfigInheritanceYamlTest extends AbstractYamlTest {
                     "    map.type-not-reinherited:",
                     "      mykey: myval",
                     "  brooklyn.children:",
+                    "  - type: " + TestEntity.class.getName(),
+                    "- type: entity-with-keys",
+                    "  brooklyn.children:",
                     "  - type: " + TestEntity.class.getName());
             
             Entity app = createStartWaitAndLogApplication(yaml);
-            TestEntity entity = (TestEntity) Iterables.getOnlyElement(app.getChildren());
-            TestEntity child = (TestEntity) Iterables.getOnlyElement(entity.getChildren());
+            Iterator<Entity> children = app.getChildren().iterator();
+            TestEntity entityMyValues = (TestEntity) children.next();
+            TestEntity childMyValues = (TestEntity) Iterables.getOnlyElement(entityMyValues.getChildren());
+            TestEntity entityNoValues = (TestEntity) children.next();
+            TestEntity childNoValues = (TestEntity) Iterables.getOnlyElement(entityNoValues.getChildren());
 
-            // Not using `assertConfigEquals(child, ...)`, bacause child.getEntityType().getConfigKey() 
-            // will not find these keys.
-            //
-            // TODO Note the different behaviour for "never" and "not-reinherited" keys for if an 
-            // untyped key is used, versus the strongly typed key. We can live with that - I wouldn't
-            // expect an implementation of TestEntity to try to use such keys that it doesn't know 
-            // about!
-            assertEquals(child.config().get(entity.getEntityType().getConfigKey("map.type-merged")), ImmutableMap.of("mykey", "myval"));
-            assertEquals(child.config().get(entity.getEntityType().getConfigKey("map.type-overwrite")), ImmutableMap.of("mykey", "myval"));
-            assertEquals(child.config().get(entity.getEntityType().getConfigKey("map.type-never")), ImmutableMap.of("myDefaultKey", "myDefaultVal"));
-            assertEquals(child.config().get(entity.getEntityType().getConfigKey("map.type-not-reinherited")), ImmutableMap.of("myDefaultKey", "myDefaultVal"));
+            // looking first at child with MY values (from runtime mgmt parent)
             
-            assertEquals(child.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-merged")), ImmutableMap.of("mykey", "myval"));
-            assertEquals(child.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-overwrite")), ImmutableMap.of("mykey", "myval"));
-            assertEquals(child.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-never")), null);
-            assertEquals(child.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-not-reinherited")), null);
+            // using keys from cNV we see the inherited values or if not inherited we don't see the keys
+            assertEquals(childMyValues.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-merged")), myKV);
+            assertEquals(childMyValues.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-overwrite")), myKV);
+            assertEquals(childMyValues.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-never")), null);
+            assertEquals(childMyValues.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-not-reinherited")), null);
+            
+            // using keys from eNV as originally defined, we get the runtime inherited values or original default values
+            // the use of non-inherited keys is weird but allows us to assert the right things happen depending which
+            // keys we use (this of course is also why we don't use `assertConfigEquals(child, ...)`
+            assertEquals(childMyValues.config().get(entityNoValues.getEntityType().getConfigKey("map.type-merged")), myKV);
+            assertEquals(childMyValues.config().get(entityNoValues.getEntityType().getConfigKey("map.type-overwrite")), myKV);
+            assertEquals(childMyValues.config().get(entityNoValues.getEntityType().getConfigKey("map.type-never")), defaultKV);
+            assertEquals(childMyValues.config().get(entityNoValues.getEntityType().getConfigKey("map.type-not-reinherited")), defaultKV);
+            
+            // if we use eMV keys, the "defaults" we see are the values it has set, since we change defaults (2018-11)
+            assertEquals(childMyValues.config().get(entityMyValues.getEntityType().getConfigKey("map.type-merged")), myKV);
+            assertEquals(childMyValues.config().get(entityMyValues.getEntityType().getConfigKey("map.type-overwrite")), myKV);
+            assertEquals(childMyValues.config().get(entityMyValues.getEntityType().getConfigKey("map.type-never")), myKV);
+            assertEquals(childMyValues.config().get(entityMyValues.getEntityType().getConfigKey("map.type-not-reinherited")), myKV);
+            
+            // looking at child with NO values
+            
+            // using keys from cNV we see the default values or if not inherited we don't see the keys
+            assertEquals(childNoValues.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-merged")), defaultKV);
+            assertEquals(childNoValues.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-overwrite")), defaultKV);
+            assertEquals(childNoValues.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-never")), null);
+            assertEquals(childNoValues.config().get(ConfigKeys.newConfigKey(Map.class, "map.type-not-reinherited")), null);
+            
+            // using keys from eNV as originally defined, we get the runtime inherited values or original default values
+            assertEquals(childNoValues.config().get(entityNoValues.getEntityType().getConfigKey("map.type-merged")), defaultKV);
+            assertEquals(childNoValues.config().get(entityNoValues.getEntityType().getConfigKey("map.type-overwrite")), defaultKV);
+            assertEquals(childNoValues.config().get(entityNoValues.getEntityType().getConfigKey("map.type-never")), defaultKV);
+            assertEquals(childNoValues.config().get(entityNoValues.getEntityType().getConfigKey("map.type-not-reinherited")), defaultKV);
+            
+            // if we use eMV keys, the "defaults" we see are the values it has set, since we change defaults (2018-11)
+            // (this is a weird one, we wouldn't do this in real life!) 
+            assertEquals(childNoValues.config().get(entityMyValues.getEntityType().getConfigKey("map.type-merged")), myKV);
+            assertEquals(childNoValues.config().get(entityMyValues.getEntityType().getConfigKey("map.type-overwrite")), myKV);
+            assertEquals(childNoValues.config().get(entityMyValues.getEntityType().getConfigKey("map.type-never")), myKV);
+            assertEquals(childNoValues.config().get(entityMyValues.getEntityType().getConfigKey("map.type-not-reinherited")), myKV);
         }
         
         // Test inheritance by child with duplicated keys that have no defaults - does it get runtime-management parent's defaults?
@@ -689,8 +725,8 @@ public class ConfigInheritanceYamlTest extends AbstractYamlTest {
     
             // Note this merges the default values from the parent and child (i.e. the child's default 
             // value does not override the parent's.
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-merged", ImmutableMap.of("myDefaultKey", "myDefaultVal"));
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-overwrite", ImmutableMap.of("myDefaultKey", "myDefaultVal"));
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-merged", defaultKV);
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-overwrite", defaultKV);
             assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-never", null);
             assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-not-reinherited", null);
         }
@@ -717,8 +753,8 @@ public class ConfigInheritanceYamlTest extends AbstractYamlTest {
             TestEntity child = (TestEntity) Iterables.getOnlyElement(entity.getChildren());
     
             
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-merged", ImmutableMap.of("mykey", "myval"));
-            assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-overwrite", ImmutableMap.of("mykey", "myval"));
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-merged", myKV);
+            assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-overwrite", myKV);
             assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-never", null);
             assertDeclaredKeyAndAnonymousKeyValuesEqual(child, "map.type-not-reinherited", null);
         }
