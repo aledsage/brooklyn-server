@@ -30,7 +30,9 @@ import org.apache.commons.collections.EnumerationUtils;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.SessionIdManager;
 import org.eclipse.jetty.server.handler.ContextHandler;
+import org.eclipse.jetty.server.session.DefaultSessionIdManager;
 import org.eclipse.jetty.server.session.Session;
 import org.eclipse.jetty.server.session.SessionHandler;
 import org.osgi.framework.BundleContext;
@@ -217,7 +219,11 @@ public class MultiSessionAttributeAdapter {
         private HttpSession findValidPreferredSession(HttpSession localSession, HttpServletRequest optionalRequest) {
             if (localSession instanceof Session) {
                 SessionHandler preferredHandler = getPreferredJettyHandler((Session)localSession, true, true);
-                HttpSession preferredSession = preferredHandler==null ? null : preferredHandler.getHttpSession(localSession.getId());
+
+                SessionIdManager idManager = ((DefaultSessionIdManager)preferredHandler.getSessionIdManager());
+                String id = idManager.getId(localSession.getId());
+                HttpSession preferredSession = preferredHandler.getSession(id);
+                
                 if (log.isTraceEnabled()) {
                     log.trace("Preferred session for "+info(optionalRequest, localSession)+": "+
                         (preferredSession!=null ? info(preferredSession) : "none, willl make new session in "+info(preferredHandler)));
